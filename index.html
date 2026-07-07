@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Hidráulico ESP-01</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background: #f0f4f8; color: #333; margin: 0; padding: 20px; }
+        h1 { color: #1a365d; margin-bottom: 30px; }
+        .grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; max-width: 900px; margin: 0 auto; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); min-width: 250px; flex: 1; }
+        .dato { font-size: 32px; font-weight: bold; color: #007bff; margin: 15px 0; }
+        .status { font-size: 20px; font-weight: bold; margin-bottom: 20px; }
+        button { padding: 12px 28px; font-size: 16px; margin: 10px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
+        .btn-on { background: #28a745; color: white; }
+        .btn-on:hover { background: #218838; }
+        .btn-off { background: #dc3545; color: white; }
+        .btn-off:hover { background: #c82333; }
+    </style>
+</head>
+<body>
+
+    <h1>Monitoreo y Control de Flujo</h1>
+
+    <div class="grid">
+        <!-- Tarjeta Flujo -->
+        <div class="card">
+            <h2>Flujo Actual</h2>
+            <p class="dato"><span id="flujo">0.00</span> L/min</p>
+        </div>
+
+        <!-- Tarjeta Consumo Acumulado -->
+        <div class="card">
+            <h2>Consumo Total</h2>
+            <p class="dato" style="color: #6f42c1;"><span id="total">0.000</span> Litros</p>
+        </div>
+
+        <!-- Tarjeta Control Bomba -->
+        <div class="card">
+            <h2>Control de Bomba</h2>
+            <div id="bomba-status" class="status" style="color: #6c757d;">Desconectado</div>
+            <button class="btn-on" onclick="enviarComando('ON')">Encender</button>
+            <button class="btn-off" onclick="enviarComando('OFF')">Apagar</button>
+        </div>
+    </div>
+
+    <script>
+        // CONFIGURA AQUÍ LA IP ASIGNADA A TU ESP-01
+        const ESP_IP = "http://192.168.100.95"; 
+
+        // Función para pedir datos en segundo plano
+        async function solicitarLecturas() {
+            try {
+                const respuesta = await fetch(`${ESP_IP}/api/data`);
+                if (!respuesta.ok) throw new Error("Error en respuesta");
+                
+                const datos = await respuesta.json();
+                
+                // Actualizar interfaz con las claves del JSON
+                document.getElementById('flujo').innerText = datos.flujo.toFixed(2);
+                document.getElementById('total').innerText = datos.total.toFixed(3);
+                
+                const statusDiv = document.getElementById('bomba-status');
+                if (datos.bomba) {
+                    statusDiv.innerText = "BOMBA ENCENDIDA";
+                    statusDiv.style.color = "#28a745";
+                } else {
+                    statusDiv.innerText = "BOMBA APAGADA";
+                    statusDiv.style.color = "#dc3545";
+                }
+            } catch (error) {
+                console.error("Error leyendo el ESP-01:", error);
+                document.getElementById('bomba-status').innerText = "ERROR DE CONEXIÓN";
+                document.getElementById('bomba-status').style.color = "#6c757d";
+            }
+        }
+
+        // Función para accionar los botones de la bomba
+        async function enviarComando(estado) {
+            try {
+                await fetch(`${ESP_IP}/api/bomba`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: estado
+                });
+                solicitarLecturas(); // Forzar actualización visual rápida
+            } catch (error) {
+                alert("No se pudo enviar la orden a la bomba");
+            }
+        }
+
+        // Realiza peticiones asíncronas cada 2 segundos (sin recargar la pestaña)
+        setInterval(solicitarLecturas, 2000);
+        solicitarLecturas(); // Ejecución inicial al cargar
+    </script>
+</body>
+</html>
