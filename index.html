@@ -1,14 +1,15 @@
+<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Control de Caudal y LED via Blynk API</title>
+  <title>Control de Caudal y Actuador via Blynk</title>
   <style>
     body { font-family: Arial, sans-serif; text-align: center; background-color: #f4f4f9; color: #333; padding-top: 30px; }
     .card-container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-bottom: 30px; }
     .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); width: 220px; }
     h1 { color: #4A90E2; }
-    .value { font-size: 40px; font-weight: bold; margin: 10px 0; }
+    .value { font-size: 38px; font-weight: bold; margin: 10px 0; }
     .caudal { color: #4DABF7; }
     .btn { display: inline-block; padding: 15px 30px; font-size: 18px; font-weight: bold; cursor: pointer; color: white; border: none; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin: 10px; transition: 0.2s; }
     .btn-on { background-color: #2ECC71; }
@@ -18,56 +19,43 @@
 </head>
 <body>
 
-  <h1>Monitor de Caudal e Iluminación</h1>
-  <p>Control Remoto y Telemetría en Tiempo Real</p>
+  <h1>Monitoreo de Caudal en Tiempo Real</h1>
+  <p>Alojado en GitHub Pages - Acceso Global</p>
  
   <div class="card-container">
-    <!-- Pin V1: Caudal -->
+    <!-- Tarjeta única para Caudal (V1) -->
     <div class="card">
-      <div class="value caudal" id="lblCaudal">--.- L/min</div>
-      <div>Flujo de Agua</div>
+      <div class="value caudal" id="lblCaudal">-- L/min</div>
+      <div>Caudal Actual</div>
     </div>
   </div>
  
-  <!-- Pin V2: Control de LED -->
   <div class="card" style="width: 420px; margin: 0 auto;">
-    <h3>Control de LED</h3>
+    <h3>Control de Iluminación</h3>
     <button id="btnLed" class="btn btn-on" onclick="alternarLed()">CARGANDO...</button>
     <div class="estado" id="lblEstado">Conectando...</div>
   </div>
 
   <script>
     const BLYNK_TOKEN = "h1wYh6GRgePgCtLyz10BPJ00OkFBP1qa";
-   
-    // Usamos el proxy público cors-anywhere para saltar la restricción CORS del navegador
-    const PROXY_URL = "https://herokuapp.com";
-    const BLYNK_URL = "https://blynk.cloud";
-   
-    // URL combinada para las peticiones fetch
-    const BASE_URL = PROXY_URL + BLYNK_URL;
+    const BASE_URL = "https://blynk.cloud/external/api";
    
     let estadoActualLed = 0;
 
     async function actualizarPantalla() {
       try {
-        // Consultar pin V1 (Medición de Caudal)
+        // Consultar pin V1 (Caudal)
         const resC = await fetch(`${BASE_URL}/get?token=${BLYNK_TOKEN}&v1`);
-        if (resC.ok) {
-          const caudal = await resC.text();
-          document.getElementById("lblCaudal").innerText = parseFloat(caudal).toFixed(2) + " L/min";
-        }
+        const caudalVal = await resC.text();
+        document.getElementById("lblCaudal").innerText = parseFloat(caudalVal).toFixed(2) + " L/min";
 
         // Consultar pin V2 (Estado del LED)
         const resL = await fetch(`${BASE_URL}/get?token=${BLYNK_TOKEN}&v2`);
-        if (resL.ok) {
-          const ledVal = await resL.text();
-          estadoActualLed = parseInt(ledVal) || 0;
-          dibujarBoton();
-        }
+        const ledVal = await resL.text();
+        estadoActualLed = parseInt(ledVal) || 0;
+        dibujarBoton();
       } catch (error) {
         console.error("Error al obtener datos de Blynk cloud:", error);
-        document.getElementById("lblEstado").innerText = "Error de conexión (CORS)";
-        document.getElementById("lblEstado").style.color = "#E75C3C";
       }
     }
 
@@ -90,20 +78,16 @@
     async function alternarLed() {
       const nuevoEstado = estadoActualLed === 1 ? 0 : 1;
       try {
-        // Enviar la actualización del pin vía HTTP GET a través del proxy
-        const res = await fetch(`${BASE_URL}/update?token=${BLYNK_TOKEN}&v4=${nuevoEstado}`);
-        if (res.ok) {
-          estadoActualLed = nuevoEstado;
-          dibujarBoton();
-        } else {
-          alert("El servidor no procesó la solicitud");
-        }
+        // Modificar pin virtual V2 vía API
+        await fetch(`${BASE_URL}/update?token=${BLYNK_TOKEN}&v2=${nuevoEstado}`);
+        estadoActualLed = nuevoEstado;
+        dibujarBoton();
       } catch (error) {
         alert("No se pudo enviar el comando a la nube");
       }
     }
 
-    // Ejecución inicial y bucle de refresco continuo cada 3 segundos
+    // Actualización automática cada 3 segundos
     actualizarPantalla();
     setInterval(actualizarPantalla, 3000);
   </script>
