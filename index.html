@@ -1,97 +1,109 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel Hidráulico ESP-01</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background: #f0f4f8; color: #333; margin: 0; padding: 20px; }
-        h1 { color: #1a365d; margin-bottom: 30px; }
-        .grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; max-width: 900px; margin: 0 auto; }
-        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); min-width: 250px; flex: 1; }
-        .dato { font-size: 32px; font-weight: bold; color: #007bff; margin: 15px 0; }
-        .status { font-size: 20px; font-weight: bold; margin-bottom: 20px; }
-        button { padding: 12px 28px; font-size: 16px; margin: 10px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
-        .btn-on { background: #28a745; color: white; }
-        .btn-on:hover { background: #218838; }
-        .btn-off { background: #dc3545; color: white; }
-        .btn-off:hover { background: #c82333; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control de Caudal y LED via Blynk API</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; background-color: #f4f4f9; color: #333; padding-top: 30px; }
+    .card-container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-bottom: 30px; }
+    .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); width: 220px; }
+    h1 { color: #4A90E2; }
+    .value { font-size: 40px; font-weight: bold; margin: 10px 0; }
+    .caudal { color: #4DABF7; }
+    .btn { display: inline-block; padding: 15px 30px; font-size: 18px; font-weight: bold; cursor: pointer; color: white; border: none; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin: 10px; transition: 0.2s; }
+    .btn-on { background-color: #2ECC71; }
+    .btn-off { background-color: #E74C3C; }
+    .estado { font-size: 18px; font-weight: bold; margin-top: 10px; }
+  </style>
 </head>
 <body>
 
-    <h1>Monitoreo y Control de Flujo</h1>
-
-    <div class="grid">
-        <!-- Tarjeta Flujo -->
-        <div class="card">
-            <h2>Flujo Actual</h2>
-            <p class="dato"><span id="flujo">0.00</span> L/min</p>
-        </div>
-
-        <!-- Tarjeta Consumo Acumulado -->
-        <div class="card">
-            <h2>Consumo Total</h2>
-            <p class="dato" style="color: #6f42c1;"><span id="total">0.000</span> Litros</p>
-        </div>
-
-        <!-- Tarjeta Control Bomba -->
-        <div class="card">
-            <h2>Control de Bomba</h2>
-            <div id="bomba-status" class="status" style="color: #6c757d;">Desconectado</div>
-            <button class="btn-on" onclick="enviarComando('ON')">Encender</button>
-            <button class="btn-off" onclick="enviarComando('OFF')">Apagar</button>
-        </div>
+  <h1>Monitor de Caudal e Iluminación</h1>
+  <p>Control Remoto y Telemetría en Tiempo Real</p>
+ 
+  <div class="card-container">
+    <!-- Pin V1: Caudal -->
+    <div class="card">
+      <div class="value caudal" id="lblCaudal">--.- L/min</div>
+      <div>Flujo de Agua</div>
     </div>
+  </div>
+ 
+  <!-- Pin V2: Control de LED -->
+  <div class="card" style="width: 420px; margin: 0 auto;">
+    <h3>Control de LED</h3>
+    <button id="btnLed" class="btn btn-on" onclick="alternarLed()">CARGANDO...</button>
+    <div class="estado" id="lblEstado">Conectando...</div>
+  </div>
 
-    <script>
-        // CONFIGURA AQUÍ LA IP ASIGNADA A TU ESP-01
-        const ESP_IP = "http://192.168.100.95"; 
+  <script>
+    // Usa el Auth Token exacto de tu medidor de caudal
+    const BLYNK_TOKEN = "h1wYh6GRgePgCtLyz10BPJ00OkFBP1qa";
+   
+    // Si tu servidor de Blynk es diferente, cambia 'ny3' o 'sgp1' según corresponda (ej. blynk.cloud)
+    const BASE_URL = "https://blynk.cloud";
+   
+    let estadoActualLed = 0;
 
-        // Función para pedir datos en segundo plano
-        async function solicitarLecturas() {
-            try {
-                const respuesta = await fetch(`${ESP_IP}/api/data`);
-                if (!respuesta.ok) throw new Error("Error en respuesta");
-                
-                const datos = await respuesta.json();
-                
-                // Actualizar interfaz con las claves del JSON
-                document.getElementById('flujo').innerText = datos.flujo.toFixed(2);
-                document.getElementById('total').innerText = datos.total.toFixed(3);
-                
-                const statusDiv = document.getElementById('bomba-status');
-                if (datos.bomba) {
-                    statusDiv.innerText = "BOMBA ENCENDIDA";
-                    statusDiv.style.color = "#28a745";
-                } else {
-                    statusDiv.innerText = "BOMBA APAGADA";
-                    statusDiv.style.color = "#dc3545";
-                }
-            } catch (error) {
-                console.error("Error leyendo el ESP-01:", error);
-                document.getElementById('bomba-status').innerText = "ERROR DE CONEXIÓN";
-                document.getElementById('bomba-status').style.color = "#6c757d";
-            }
+    // Obtener los datos desde la API de Blynk de manera asíncrona
+    async function actualizarPantalla() {
+      try {
+        // Consultar pin V1 (Medición de Caudal)
+        const resC = await fetch(`${BASE_URL}/get?token=${BLYNK_TOKEN}&v1`);
+        if (resC.ok) {
+          const caudal = await resC.text();
+          document.getElementById("lblCaudal").innerText = parseFloat(caudal).toFixed(2) + " L/min";
         }
 
-        // Función para accionar los botones de la bomba
-        async function enviarComando(estado) {
-            try {
-                await fetch(`${ESP_IP}/api/bomba`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain' },
-                    body: estado
-                });
-                solicitarLecturas(); // Forzar actualización visual rápida
-            } catch (error) {
-                alert("No se pudo enviar la orden a la bomba");
-            }
+        // Consultar pin V2 (Estado del LED)
+        const resL = await fetch(`${BASE_URL}/get?token=${BLYNK_TOKEN}&v2`);
+        if (resL.ok) {
+          const ledVal = await resL.text();
+          estadoActualLed = parseInt(ledVal) || 0;
+          dibujarBoton();
         }
+      } catch (error) {
+        console.error("Error al obtener datos de Blynk cloud:", error);
+      }
+    }
 
-        // Realiza peticiones asíncronas cada 2 segundos (sin recargar la pestaña)
-        setInterval(solicitarLecturas, 2000);
-        solicitarLecturas(); // Ejecución inicial al cargar
-    </script>
+    function dibujarBoton() {
+      const btn = document.getElementById("btnLed");
+      const lbl = document.getElementById("lblEstado");
+      if (estadoActualLed === 1) {
+        btn.innerText = "APAGAR LED";
+        btn.className = "btn btn-off";
+        lbl.innerText = "Estado actual: ENCENDIDO";
+        lbl.style.color = "#2ECC71";
+      } else {
+        btn.innerText = "ENCENDER LED";
+        btn.className = "btn btn-on";
+        lbl.innerText = "Estado actual: APAGADO";
+        lbl.style.color = "#E74C3C";
+      }
+    }
+
+    // Cambiar el valor del pin virtual V2 en Blynk
+    async function alternarLed() {
+      const nuevoEstado = estadoActualLed === 1 ? 0 : 1;
+      try {
+        // Enviar la actualización del pin vía HTTP GET
+        const res = await fetch(`${BASE_URL}/update?token=${BLYNK_TOKEN}&v2=${nuevoEstado}`);
+        if (res.ok) {
+          estadoActualLed = nuevoEstado;
+          dibujarBoton();
+        } else {
+          alert("El servidor no procesó la solicitud");
+        }
+      } catch (error) {
+        alert("No se pudo enviar el comando a la nube");
+      }
+    }
+
+    // Ejecución inicial y bucle de refresco continuo cada 2.5 segundos
+    actualizarPantalla();
+    setInterval(actualizarPantalla, 2500);
+  </script>
 </body>
-</html>
+</html> 
